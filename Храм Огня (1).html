@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Храм Огня</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@500;700&family=Noto+Serif+SC:wght@700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0e0a06;--stone:#3a2f22;--stone-d:#221a12;--edge:#5a4a38;
+  --sand:#d8cbb0;--gold:#c9a860;--gold-d:#6a5530;--flame:#f5a623;
+  --muted:#8a7a63;--ok:#a8c088;--bad:#d9603a;
+  box-sizing:border-box;color-scheme:dark;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none;
+  background:var(--bg);color:var(--sand);font-family:'Cormorant SC','Noto Serif SC',Georgia,serif}
+body{background:
+  linear-gradient(90deg,rgba(0,0,0,.45),transparent 8%,transparent 92%,rgba(0,0,0,.45)),
+  repeating-linear-gradient(0deg,transparent 0 31px,rgba(90,74,56,.12) 31px 32px),
+  radial-gradient(ellipse at 50% 100%,#2a1c10,var(--bg) 70%)}
+
+/* ── раскладка игры: шапка / поле / подсказка / кнопки ── */
+#game{height:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 12px}
+#hud,#btns{width:min(100%,max(var(--bw,0px),320px));flex:none}
+#stage{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
+#note{flex:none;height:22px;line-height:22px;font-size:15px;letter-spacing:.1em;color:var(--flame);
+  opacity:0;transition:opacity .25s}
+#note.on{opacity:1}
+
+.slab{background:linear-gradient(180deg,var(--stone),var(--stone-d));
+  border:1px solid var(--edge);border-bottom:2px solid #120c07;border-radius:3px;
+  box-shadow:inset 0 1px 0 rgba(216,203,176,.12)}
+
+#hud{display:grid;grid-template-columns:repeat(4,1fr);padding:6px 0}
+.cell{padding:2px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.cell+.cell{border-left:1px solid rgba(122,103,80,.35)}
+.cell small{font-size:12px;letter-spacing:.14em;color:var(--muted);line-height:1}
+.cell b{font-size:22px;font-weight:700;color:var(--sand);line-height:1.1;font-variant-numeric:tabular-nums}
+.cell.low b{color:var(--bad)}
+#torchCell{flex-direction:row;align-items:center;gap:6px}
+#torchCell div{display:flex;flex-direction:column;gap:2px}
+#flame{width:32px;height:44px;flex:none;margin:-8px 0}
+@keyframes blink{50%{opacity:.45}}
+
+canvas#board{display:block;touch-action:none;border:2px solid var(--gold-d);border-radius:4px;
+  background:#150f09;box-shadow:0 0 0 4px var(--stone-d),0 6px 18px rgba(0,0,0,.6)}
+
+#btns{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+
+/* ── кнопки ── */
+button{font:inherit;color:inherit}
+.btn{min-height:48px;padding:10px 16px;font-size:17px;font-weight:700;letter-spacing:.1em;
+  color:var(--sand);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(180deg,var(--stone),var(--stone-d));
+  border:1px solid var(--edge);border-bottom:2px solid #120c07;border-radius:3px;
+  box-shadow:inset 0 1px 0 rgba(216,203,176,.12);transition:background .15s,transform .08s}
+.btn:active{transform:translateY(1px);background:var(--stone-d)}
+.btn.main{background:linear-gradient(180deg,#6a4a2a,var(--stone));border-color:var(--gold-d);color:#f3e6c6}
+@media (hover:hover){.btn:hover{background:linear-gradient(180deg,var(--edge),var(--stone))}}
+
+/* ── экраны ── */
+.screen{position:fixed;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;
+  justify-content:safe center;gap:12px;text-align:center;overflow-y:auto;
+  padding:calc(20px + env(safe-area-inset-top,0px)) 20px calc(20px + env(safe-area-inset-bottom,0px));
+  background:radial-gradient(ellipse at 50% 30%,#22170d,#0a0603 80%)}
+.screen.show{display:flex}
+.screen h1{margin:0;font:900 clamp(40px,11vmin,72px) 'Noto Serif SC',serif;letter-spacing:.12em;color:#efe2c0;
+  text-shadow:0 2px 3px #000,0 0 28px rgba(217,96,26,.25)}
+.screen h2{margin:0;font-size:clamp(26px,5vmin,34px);letter-spacing:.16em;color:var(--gold)}
+.sub{margin:0;font-size:16px;letter-spacing:.16em;color:var(--muted)}
+.rune{font:900 30px 'Noto Serif SC',serif;color:var(--flame);letter-spacing:.5em;margin-right:-.5em}
+.list{display:flex;flex-direction:column;gap:10px;width:min(340px,100%)}
+.text{width:min(480px,100%);display:flex;flex-direction:column;gap:10px;font-size:19px;line-height:1.4;text-align:left}
+.text p{margin:0;padding:10px 14px;border-left:3px solid var(--gold-d);background:rgba(34,26,18,.7)}
+.text b{color:var(--gold)}
+.stars{font-size:34px;letter-spacing:.2em;color:var(--gold)}
+.info{font-size:19px;line-height:1.6}.info b{color:var(--gold)}
+
+#levelsGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;width:min(420px,100%)}
+.lv{aspect-ratio:1;min-height:52px;font-size:22px;font-weight:700;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;
+  background:linear-gradient(180deg,var(--stone),var(--stone-d));border:1px solid var(--edge);border-radius:3px}
+.lv.done{color:var(--ok);border-color:#4a5a30}
+.lv small{font-size:11px;margin-top:2px}
+.lv.locked{opacity:.4;cursor:not-allowed}
+
+/* ── анимации и оформление ── */
+.screen.show{animation:scr .35s ease-out}
+@keyframes scr{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.list .btn{animation:up .5s both}
+.list .btn:nth-child(2){animation-delay:.07s}.list .btn:nth-child(3){animation-delay:.14s}
+.list .btn:nth-child(4){animation-delay:.21s}.list .btn:nth-child(5){animation-delay:.28s}
+.rune{text-shadow:0 0 14px rgba(245,166,35,.45)}
+@keyframes fl{0%,100%{text-shadow:0 0 8px rgba(245,166,35,.3)}50%{text-shadow:0 0 22px rgba(245,166,35,.8)}}
+#menu h1{background:linear-gradient(180deg,#f6e9c4,#b99a5a);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 2px 2px #000)}
+.btn{position:relative;overflow:hidden}
+.btn::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold-d)}
+.btn.main{box-shadow:0 0 10px rgba(217,96,26,.3),inset 0 1px 0 rgba(255,230,180,.15)}
+@keyframes glow{50%{box-shadow:0 0 14px rgba(217,96,26,.45),inset 0 1px 0 rgba(255,230,180,.2)}}
+.main.btn,.list .main{animation-name:up;animation-duration:.5s;animation-iteration-count:1}
+.stars{animation:pop .7s both}
+@keyframes pop{0%{transform:scale(0) rotate(-30deg)}60%{transform:scale(1.25) rotate(6deg)}100%{transform:none}}
+#hud{animation:up .5s both}
+.card{width:min(340px,100%);padding:18px;display:flex;flex-direction:column;gap:6px;
+  background:linear-gradient(180deg,var(--stone),var(--stone-d));border:1px solid var(--gold-d);border-radius:4px;
+  box-shadow:0 0 0 4px rgba(34,26,18,.8)}
+.card small{font-size:14px;letter-spacing:.24em;color:var(--muted)}
+.card strong{font:900 32px 'Noto Serif SC',serif;color:var(--gold);letter-spacing:.04em}
+.card em{font-size:17px;letter-spacing:.3em;color:var(--flame);font-style:normal}
+.card p{margin:6px 0 0;font-size:18px;color:var(--sand)}
+.facts{display:flex;gap:10px;width:min(340px,100%)}
+.facts div{flex:1;padding:10px 4px;background:var(--stone-d);border:1px solid var(--edge);border-radius:3px;display:flex;flex-direction:column;gap:2px}
+.facts b{font-size:28px;color:var(--gold)}.facts small{font-size:13px;color:var(--muted);letter-spacing:.1em}
+
+/* ── экран загрузки: врата храма ── */
+#boot{position:fixed;inset:0;z-index:20;display:none}
+#boot.on{display:block}
+.door{position:absolute;top:0;bottom:0;width:50.5%;
+  background:repeating-linear-gradient(0deg,transparent 0 63px,rgba(0,0,0,.35) 63px 64px),linear-gradient(90deg,#2d2217,#1a130c);
+  box-shadow:inset 0 0 70px #000;border:3px solid var(--gold-d)}
+.door.l{left:0;animation:dl 2.3s both}.door.r{right:0;animation:dr 2.3s both}
+@keyframes dl{0%{transform:translateX(-100%)}20%,58%{transform:none}100%{transform:translateX(-100%)}}
+@keyframes dr{0%{transform:translateX(100%)}20%,58%{transform:none}100%{transform:translateX(100%)}}
+.bbox{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  animation:tb 2.3s both;pointer-events:none}
+@keyframes tb{0%,18%{opacity:0;transform:scale(1.1)}30%,54%{opacity:1;transform:none}66%,100%{opacity:0}}
+.bbox small{font-size:16px;letter-spacing:.3em;color:var(--gold)}
+.bbox .skip{font-size:13px;color:var(--muted);letter-spacing:.14em;margin-top:6px}
+.bbox h2{font:900 clamp(32px,8vmin,56px) 'Noto Serif SC',serif;letter-spacing:.08em;color:#efe2c0;text-shadow:0 2px 4px #000}
+.bar{width:min(240px,70vw);height:5px;background:var(--stone-d);border:1px solid var(--edge);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#d9601a,var(--gold));animation:bar 1.3s .15s linear both}
+@keyframes bar{to{width:100%}}
+/* ── адаптация под размер экрана ── */
+@media (max-width:480px){
+  #game{padding:8px 6px;gap:6px}
+  .cell{padding:2px 6px}
+  .cell small{font-size:11px;letter-spacing:.08em}
+  .cell b{font-size:19px}
+  #torchCell{gap:2px}
+  #flame{width:24px;height:33px;margin:-6px 0 -6px -4px}
+  #btns{gap:6px}
+  .btn{padding:8px;font-size:15px;letter-spacing:.05em}
+}
+@media (min-width:900px) and (min-height:700px){
+  .cell b{font-size:26px}.cell small{font-size:14px}
+  .btn{min-height:56px;font-size:19px}
+}
+/* телефон в горизонтальном положении: поле слева, панель справа */
+@media (orientation:landscape) and (max-height:520px){
+  #game{display:grid;grid-template-columns:minmax(0,1fr) 190px;grid-template-rows:auto 1fr auto;
+    column-gap:10px;row-gap:8px;align-items:stretch;
+    padding:6px calc(8px + env(safe-area-inset-right,0px)) 6px calc(8px + env(safe-area-inset-left,0px))}
+  #stage{grid-column:1;grid-row:1/4}
+  #hud{grid-column:2;grid-row:1;width:100%;grid-template-columns:1fr 1fr;row-gap:6px}
+  .cell:nth-child(3){border-left:0}
+  #note{grid-column:2;grid-row:2;align-self:center;text-align:center;height:auto;line-height:1.2}
+  #btns{grid-column:2;grid-row:3;width:100%;grid-template-columns:1fr}
+  .btn{min-height:42px}
+}
+#tmpl{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+#menu>*:not(canvas){position:relative;z-index:1}
+#menu h1{filter:drop-shadow(0 2px 2px #000) drop-shadow(0 0 18px rgba(245,166,35,.35))}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
+</style>
+</head>
+<body>
+
+<div id="game">
+  <div id="hud" class="slab">
+    <div class="cell"><small>ЧЕРТОГ</small><b id="hLv">1/14</b></div>
+    <div class="cell" id="cTime"><small>ВРЕМЯ</small><b id="hTime">01:30</b></div>
+    <div class="cell"><small>ПАРЫ</small><b id="hPairs">0</b></div>
+    <div class="cell" id="torchCell">
+      <canvas id="flame" width="32" height="44"></canvas>
+      <div><small>ФАКЕЛ</small><b id="hFuel">100%</b></div>
+    </div>
+  </div>
+  <div id="stage"><canvas id="board"></canvas></div>
+  <div id="note"></div>
+  <div id="btns">
+    <button class="btn" id="bHint">Подсказка</button>
+    
+    <button class="btn" id="bPause">Пауза</button>
+  </div>
+</div>
+
+<div class="screen show" id="menu">
+  <canvas id="tmpl"></canvas>
+  <div class="rune">火灯</div>
+  <h1>ХРАМ ОГНЯ</h1>
+  <p class="sub">СОЛИТЁР С ИЕРОГЛИФАМИ</p>
+  <div class="list" style="margin-top:12px">
+    <button class="btn main" id="bPlay">Продолжить</button>
+    <button class="btn" id="bLevels">Выбор чертога</button>
+    <button class="btn" id="bHow">Как играть</button>
+    <button class="btn" id="bCred">Об авторе</button>
+    <button class="btn" id="bSnd1">Звук: вкл</button>
+  </div>
+</div>
+
+<div class="screen" id="levels">
+  <h2>Выбор чертога</h2>
+  <div id="levelsGrid"></div>
+  <button class="btn" style="width:min(340px,100%)" data-go="menu">Назад</button>
+</div>
+
+<div class="screen" id="how">
+  <h2>Как играть</h2>
+  <div class="text">
+    <p><b>Цель.</b> Убирайте пары одинаковых иероглифов и очистите зал до конца времени.</p>
+    <p><b>Этажи.</b> Как в маджонге: плитку можно взять, если на ней ничего не лежит и слева или справа от неё свободно. Затемнённые плитки пока заблокированы.</p>
+    <p><b>Факел.</b> Пока он горит, время идёт. Когда огонь гаснет, зал тонет во мраке и плитки перемешиваются.</p>
+    <p><b>Помощь.</b> Подсказка стоит 5 секунд. Клавиши: H, P.</p>
+  </div>
+  <button class="btn" style="width:min(340px,100%)" data-go="menu">Назад</button>
+</div>
+
+<div class="screen" id="pause">
+  <h2>Пауза</h2>
+  <div class="list">
+    <button class="btn main" id="bResume">Продолжить</button>
+    <button class="btn" id="bRestart">Заново</button>
+    <button class="btn" id="bSnd2">Звук: вкл</button>
+    <button class="btn" data-go="menu">В меню</button>
+  </div>
+</div>
+
+<div class="screen" id="end">
+  <div class="stars" id="eStars"></div>
+  <h2 id="eTitle"></h2>
+  <div class="info" id="eInfo"></div>
+  <div class="list">
+    <button class="btn main" id="bNext">Следующий чертог</button>
+    <button class="btn" id="bRetry">Повторить</button>
+    <button class="btn" data-go="menu">В меню</button>
+  </div>
+</div>
+
+<div id="boot">
+  <div class="door l"></div><div class="door r"></div>
+  <div class="bbox">
+    <div class="rune">火</div>
+    <small id="bNum"></small>
+    <h2 id="bName"></h2>
+    <div class="bar"><i></i></div>
+    <small class="skip">нажмите, чтобы пропустить</small>
+  </div>
+</div>
+
+<div class="screen" id="credits">
+  <div class="rune">火灯</div>
+  <h2>Об авторе</h2>
+  <div class="card">
+    <small>СОЗДАТЕЛЬ ИГРЫ</small>
+    <strong>Олег Боженов</strong>
+    <em>Oleg Bozhenov</em>
+    <p>Идея, дизайн, звук и код</p>
+  </div>
+  <div class="facts">
+    <div><b>30</b><small>чертогов</small></div>
+    <div><b>48</b><small>иероглифов</small></div>
+    <div><b>3.0</b><small>версия</small></div>
+  </div>
+  <p class="sub">HTML5 CANVAS · WEB AUDIO · 2026</p>
+  <button class="btn" style="width:min(340px,100%)" data-go="menu">Назад</button>
+</div>
+
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+const SY=[...'火水木金土日月山川石田心手目耳口大小上下天地人生风云雨雪花草竹米门王玉本林森鸟鱼马牛羊光电力文'];
+/* киноварь, нефрит, лазурит, охра, аметист, бирюза, ржавчина, олива */
+const PAL=['#a3281c','#1f6b4f','#1e4e8c','#8a5a00','#6a2c7a','#0f6a73','#b34a12','#5a5a14'];
+
+/* ── формы залов ── */
+const M={
+  full:()=>true,
+  hole:(r,c,C,R)=>!(Math.abs(r-(R-1)/2)<1.2&&Math.abs(c-(C-1)/2)<1.8),
+  cross:(r,c,C,R)=>Math.abs(r-(R-1)/2)<=1.5||Math.abs(c-(C-1)/2)<=1.5,
+  diamond:(r,c,C,R)=>{const d=Math.abs(c-(C-1)/2)/(C/2)+Math.abs(r-(R-1)/2)/(R/2);return d<=1&&d>=.3},
+  frame:(r,c,C,R)=>{const d=Math.min(r,c,R-1-r,C-1-c);return d===0||d===2},
+  checker:(r,c)=>(r>>1)%2===(c>>1)%2,
+  hour:(r,c,C,R)=>Math.abs(c-(C-1)/2)/(C/2)<=Math.max(.35,Math.abs(r-(R-1)/2)/(R/2)*1.1),
+  cols:(r,c)=>c%3!==2,
+  stripes:(r)=>r%3!==2,
+  circle:(r,c,C,R)=>Math.pow((c-(C-1)/2)/(C/2),2)+Math.pow((r-(R-1)/2)/(R/2),2)<=1,
+  ring:(r,c,C,R)=>{const d=Math.pow((c-(C-1)/2)/(C/2),2)+Math.pow((r-(R-1)/2)/(R/2),2);return d<=1&&d>=.22},
+  zig:(r,c)=>r%2===0||c%6===((r>>1)%2?5:0),
+  arch:(r,c,C)=>r<2||c<2||c>=C-2||Math.abs(c-(C-1)/2)<1.5,
+  saltire:(r,c,C,R)=>Math.abs(c/(C-1)-r/(R-1))<.2||Math.abs(c/(C-1)+r/(R-1)-1)<.2
+};
+const LEVELS=[
+  ['Рассвет',6,5,'full'],['Рисовое поле',8,6,'hole'],['Колоннада',8,6,'cols'],
+  ['Площадь',8,8,'hole'],['Врата',10,8,'frame'],['Крест',10,8,'cross'],
+  ['Ромб',9,9,'diamond'],['Галереи',10,8,'stripes'],['Шахматы',10,8,'checker'],
+  ['Святилище',10,9,'diamond'],['Песочные часы',11,10,'hour'],['Двойная рама',12,9,'frame'],
+  ['Алтарь',12,10,'cross'],['Большой зал',12,10,'hole'],
+  ['Лунные врата',11,9,'circle'],['Каменный круг',12,10,'ring'],['Тропа пилигрима',12,8,'zig'],
+  ['Аркада',12,9,'arch'],['Перекрёсток',12,10,'saltire'],['Нефритовый двор',13,9,'hole'],
+  ['Храм ветров',13,10,'cross'],['Тронный зал',14,9,'frame'],['Лотос',13,11,'diamond'],
+  ['Звёздный свод',14,10,'circle'],['Колонны небес',14,10,'cols'],['Тайная галерея',14,10,'stripes'],
+  ['Шахматный двор',14,10,'checker'],['Круг предков',14,11,'ring'],['Сердце храма',14,11,'saltire'],
+  ['Огненный алтарь',15,11,'hole']
+];
+
+/* ── состояние ── */
+let S={u:1,snd:1};
+try{Object.assign(S,JSON.parse(localStorage.getItem('templeFire')||'{}'))}catch(e){}
+const save=()=>{try{localStorage.setItem('templeFire',JSON.stringify(S))}catch(e){}};
+let lv=0,C=6,R=5,g=[],mk=[],cs=40,DPR=1,sel=-1,hint=null,hintEnd=0;
+let sp=[],vn=[],ps=[],lk=[],dtg=.016,bootT=0;
+let T=[],pos=new Map(),order=[],slots=[],LZ=1,ox=0,ofs=0,BW=0,BH=0;
+let el=0,lim=60,fuel=1,burn=25,dark=0,darkT=-1,reshuf=false,pairs=0,state='menu',last=0;
+
+const board=$('#board'),x=board.getContext('2d');
+const fl=$('#flame').getContext('2d');
+
+/* ── звук (простые мягкие тона) ── */
+let AC=null;
+function tone(f,d,type='triangle',v=.15,when=0){
+  if(!S.snd||!AC)return;
+  const t=AC.currentTime+when,o=AC.createOscillator(),a=AC.createGain();
+  o.type=type;o.frequency.value=f;
+  a.gain.setValueAtTime(.0001,t);a.gain.exponentialRampToValueAtTime(v,t+.01);
+  a.gain.exponentialRampToValueAtTime(.0001,t+d);
+  o.connect(a).connect(AC.destination);o.start(t);o.stop(t+d+.02);
+}
+const snd={
+  pick:()=>tone(520,.08),
+  match:()=>{tone(523,.15);tone(784,.2,'sine',.12,.07)},
+  out:()=>tone(110,1.2,'sine',.2),
+  gate:()=>{tone(70,1.1,'sine',.22);tone(55,.9,'sine',.2,.9)},
+  win:()=>[392,523,659,784].forEach((f,i)=>tone(f,.3,'triangle',.14,i*.11)),
+  lose:()=>[294,247,196].forEach((f,i)=>tone(f,.35,'triangle',.13,i*.15)),
+  block:()=>tone(150,.09,'square',.07)
+};
+addEventListener('pointerdown',()=>{if(!AC){const A=window.AudioContext||window.webkitAudioContext;if(A)AC=new A()}if(AC&&AC.state==='suspended')AC.resume()});
+function sndUI(){const t='Звук: '+(S.snd?'вкл':'выкл');$('#bSnd1').textContent=t;$('#bSnd2').textContent=t}
+function toggleSnd(){S.snd=S.snd?0:1;save();sndUI()}
+
+/* ── служебное ── */
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+const fmt=s=>{s=Math.max(0,Math.ceil(s));return String(s/60|0).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+let noteT;
+function note(m){const n=$('#note');n.textContent=m;n.classList.add('on');clearTimeout(noteT);noteT=setTimeout(()=>n.classList.remove('on'),1800)}
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('show',s.id===id))}
+
+/* ── уровень ── */
+/* ── этажи как в маджонге: позиции в половинках клетки, плитка = 2×2 ── */
+const K=(z,x,y)=>(z*100+x)*100+y;
+function freeOf(t,pm){
+  for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)if(pm.has(K(t.z+1,t.x+dx,t.y+dy)))return false;
+  let l=false,r=false;
+  for(let dy=-1;dy<=1;dy++){if(pm.has(K(t.z,t.x-2,t.y+dy)))l=true;if(pm.has(K(t.z,t.x+2,t.y+dy)))r=true}
+  return !(l&&r);
+}
+/* раскладка «с конца»: снимаем свободные пары по очереди и пишем им символ — решение гарантировано */
+function fillSolvable(list,pr){
+  for(let tr=0;tr<80;tr++){
+    const pm=new Map(list.map(t=>[K(t.z,t.x,t.y),t])),left=new Set(list);let ok=true;
+    for(const sy of shuffle(pr.slice())){
+      const fr=[...left].filter(t=>freeOf(t,pm));
+      if(fr.length<2){ok=false;break}
+      fr.sort((a,b)=>(b.z-a.z)+(Math.random()-.5)*(tr<40?2.2:6));
+      const a=fr[0],b=fr[1+(Math.random()*(fr.length-1)|0)];
+      a.s=b.s=sy;
+      [a,b].forEach(t=>{pm.delete(K(t.z,t.x,t.y));left.delete(t)});
+    }
+    if(ok)return true;
+  }
+  return false;
+}
+function refreshFree(){T.forEach(t=>{t.f=t.a?freeOf(t,pos):false})}
+const rm=i=>{const t=T[i];t.a=0;pos.delete(K(t.z,t.x,t.y))};
+function buildLevel(){
+  const [,c,r,m]=LEVELS[lv];C=c;R=r;T=[];slots=[];
+  const has=new Set(),add=(z,x,y)=>{T.push({z,x,y,s:-1,a:1,f:false,sp:Infinity,sh:-9999});has.add(K(z,x,y))};
+  for(let y=0;y<R;y++)for(let k=0;k<C;k++)if(M[m](y,k,C,R)){add(0,2*k,2*y);slots.push([2*k,2*y])}
+  const L=lv<3?2:3;
+  for(let z=1;z<L;z++){
+    const o=z%2?1:0;
+    /* плитка опирается на 4 нижние; на тонких залах — на 2 («мостик») */
+    const cand=(need,rad)=>{
+      const out=[];
+      for(let y=o;y<2*R;y+=2)for(let k=o;k<2*C;k+=2){
+        const n=[[-1,-1],[1,-1],[-1,1],[1,1]].filter(([a,b])=>has.has(K(z-1,k+a,y+b))).length;
+        const nx=((k+1)/2-C/2)/(C/2),ny=((y+1)/2-R/2)/(R/2);
+        if(n>=need&&nx*nx+ny*ny<=rad*rad)out.push([k,y]);
+      }
+      return out;
+    };
+    let cd=cand(4,z===1?.88:.62);
+    if(cd.length<4)cd=shuffle(cand(2,9)).slice(0,Math.ceil(slots.length*(z===1?.55:.3)));
+    cd.forEach(([k,y])=>add(z,k,y));
+  }
+  if(T.length%2)T.pop();
+  const kinds=Math.min(SY.length,6+lv*2),pr=[];
+  for(let n=0;n<T.length/2;n++)pr.push(n%kinds);
+  while(!fillSolvable(T,pr)&&T.length>2){T.pop();T.pop();pr.pop()}
+  LZ=T.reduce((q,t)=>Math.max(q,t.z),0)+1;
+  pos=new Map(T.map(t=>[K(t.z,t.x,t.y),t]));
+  order=T.map((t,i)=>i).sort((a,b)=>T[a].z-T[b].z||T[a].y-T[b].y||T[a].x-T[b].x);
+  pairs=T.length/2;lim=Math.round(30+T.length*1.7);
+  burn=Math.max(9,Math.min(17.5,lim*.15));
+  vn=[];ps=[];lk=[];
+  el=0;fuel=1;dark=0;darkT=-1;reshuf=false;sel=-1;hint=null;
+  refreshFree();fit();hud();
+}
+function startLevel(i){
+  lv=Math.min(i,LEVELS.length-1);
+  buildLevel();
+  state='loading';show(null);
+  const b=$('#boot');
+  $('#bNum').textContent='ЧЕРТОГ '+(lv+1)+' / '+LEVELS.length;
+  $('#bName').textContent=LEVELS[lv][0];
+  b.classList.remove('on');void b.offsetWidth;b.classList.add('on');
+  clearTimeout(bootT);bootT=setTimeout(endBoot,2300);snd.gate();
+}
+function endBoot(){
+  clearTimeout(bootT);$('#boot').classList.remove('on');
+  if(state!=='loading')return;
+  state='playing';const n=performance.now();
+  T.forEach(t=>t.sp=n+(t.x+t.y)*18+t.z*260);
+}
+function reshuffleTiles(){
+  const al=T.filter(t=>t.a),vals=al.map(t=>t.s),cnt={},pr=[];
+  vals.forEach(v=>cnt[v]=(cnt[v]||0)+1);
+  for(const v in cnt)for(let i=0;i<cnt[v]/2;i++)pr.push(+v);
+  if(!fillSolvable(al,pr)){shuffle(vals);al.forEach((t,i)=>t.s=vals[i])}
+  const n=performance.now();al.forEach(t=>t.sp=n+t.x*12);
+  sel=-1;hint=null;refreshFree();
+}
+function finish(win){
+  state='ended';
+  if(win){
+    snd.win();S.u=Math.max(S.u,Math.min(lv+2,LEVELS.length));save();
+    const q=el/lim,st=q<.4?3:q<.7?2:1;
+    $('#eStars').textContent='★'.repeat(st)+'☆'.repeat(3-st);
+    $('#eTitle').textContent='Зал очищен';
+    $('#eInfo').innerHTML=`Чертог <b>${lv+1}</b> · ${LEVELS[lv][0]}<br>Время: <b>${fmt(el)}</b>`;
+  }else{
+    snd.lose();
+    $('#eStars').textContent='';
+    $('#eTitle').textContent='Время вышло';
+    $('#eInfo').innerHTML=`Чертог <b>${lv+1}</b> · ${LEVELS[lv][0]}<br>Осталось пар: <b>${pairs}</b>`;
+  }
+  $('#bNext').style.display=win&&lv<LEVELS.length-1?'':'none';
+  show('end');
+}
+
+/* ── ввод ── */
+const tp=t=>[ox+t.x*cs/2-t.z*ofs,ox+t.y*cs/2-t.z*ofs];
+board.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  if(state!=='playing'||darkT>=0)return;
+  const b=board.getBoundingClientRect(),mx=e.clientX-b.left,my=e.clientY-b.top;
+  let i=-1;
+  for(let k=order.length-1;k>=0;k--){
+    const t=T[order[k]];if(!t.a)continue;const [p,q]=tp(t);
+    if(mx>=p&&mx<p+cs&&my>=q&&my<q+cs){i=order[k];break}
+  }
+  if(i<0)return;
+  const t=T[i];
+  if(!t.f){t.sh=performance.now();snd.block();return}
+  if(sel<0){sel=i;snd.pick();return}
+  if(sel===i){sel=-1;return}
+  if(T[sel].s===t.s){
+    vanish(sel,i);rm(sel);rm(i);sel=-1;hint=null;pairs--;snd.match();refreshFree();
+    if(!pairs)finish(true);
+    else if(!findPair()){reshuffleTiles();note('Ходов нет — плитки перемешаны')}
+  }else{sel=i;snd.pick()}
+});
+function findPair(){
+  const seen={};
+  for(let i=0;i<T.length;i++){const t=T[i];if(!t.a||!t.f)continue;if(seen[t.s]!==undefined)return[seen[t.s],i];seen[t.s]=i}
+  return null;
+}
+function doHint(){
+  if(state!=='playing'||darkT>=0)return;
+  hint=findPair();hintEnd=performance.now()+2500;el+=5;note('−5 секунд');
+}
+function doShuffle(){
+  if(state!=='playing'||darkT>=0)return;
+  reshuffleTiles();el+=10;note('−10 секунд');
+}
+function doPause(){if(state==='playing'){state='paused';show('pause')}}
+function doResume(){if(state==='paused'){state='playing';show(null)}}
+
+/* ── отрисовка поля ── */
+function rr(px,py,w,h,r){x.beginPath();x.roundRect(px,py,w,h,r)}
+function tileAt(px,py,sym,sc,al,lift,isSel,isHint,t,dim){
+  const gp=Math.max(2,cs*.035),w=cs-gp*2,cx=px+cs/2,cy=py+cs/2,col=PAL[sym%PAL.length],th=gp*1.5;
+  x.save();x.globalAlpha=al;x.translate(cx,cy-lift);x.scale(sc,sc);x.translate(-cx,-cy);
+  x.fillStyle='rgba(0,0,0,.45)';rr(px+gp+th+1.5,py+gp+th+2+lift,w,w,cs*.08);x.fill();
+  x.fillStyle='#6b5a3c';rr(px+gp+th,py+gp+th,w,w,cs*.08);x.fill();
+  const gr=x.createLinearGradient(0,py,0,py+cs);gr.addColorStop(0,'#efe3c8');gr.addColorStop(1,'#bba886');
+  x.fillStyle=gr;rr(px+gp,py+gp,w,w,cs*.08);x.fill();
+  x.strokeStyle='rgba(60,45,30,.85)';x.lineWidth=1.2;x.stroke();
+  x.globalAlpha=al*.4;x.strokeStyle=col;x.lineWidth=1.5;rr(px+gp+3,py+gp+3,w-6,w-6,cs*.05);x.stroke();x.globalAlpha=al;
+  if(isSel||isHint){
+    x.strokeStyle=isSel?'#e0b84a':'rgba(245,166,35,.85)';
+    x.lineWidth=3;rr(px+gp+1,py+gp+1,w-2,w-2,cs*.08);x.stroke();
+  }
+  x.fillStyle=col;x.font=`900 ${cs*.56|0}px 'Noto Serif SC',serif`;
+  x.textAlign='center';x.textBaseline='middle';
+  x.fillText(SY[sym],cx,cy+cs*.04);
+  if(dim){x.fillStyle='rgba(30,18,8,.36)';rr(px+gp,py+gp,w,w,cs*.08);x.fill()}
+  x.restore();
+}
+function drawTile(i,t){
+  const q=T[i],e=Math.min(1,(t-q.sp)/420);if(e<=0)return;
+  const isSel=i===sel,isH=hint&&(hint[0]===i||hint[1]===i);
+  let sc=.4+.6*(1-Math.pow(1-e,3))+(e<1?Math.sin(e*Math.PI)*.08:0),lift=0;
+  if(isSel){sc*=1.07;lift=cs*.06}
+  let [px,py]=tp(q);
+  const sh=t-q.sh;if(sh<260)px+=Math.sin(sh*.07)*cs*.05*(1-sh/260);
+  tileAt(px,py,q.s,sc,e,lift,isSel,isH,t,!q.f);
+}
+function vanish(a,b){
+  const t=performance.now(),cn=q=>{const [p,r]=tp(q);return [p+cs/2,r+cs/2]};
+  [a,b].forEach(i=>{
+    const q=T[i],[X,Y]=cn(q);
+    vn.push({q:{x:q.x,y:q.y,z:q.z},s:q.s,t0:t});
+    for(let k=0;k<14;k++){const an=Math.random()*6.28,v=cs*(.6+Math.random()*2.4);
+      ps.push({x:X,y:Y,vx:Math.cos(an)*v,vy:Math.sin(an)*v-cs*.7,l:1,c:k%2?PAL[q.s%8]:'#f5b040'})}
+  });
+  lk.push({a:cn(T[a]),b:cn(T[b]),t0:t});
+}
+function draw(t){
+  x.setTransform(DPR,0,0,DPR,0,0);x.clearRect(0,0,BW,BH);
+  for(const [sx,sy] of slots){
+    x.fillStyle='rgba(58,47,34,.35)';rr(ox+sx*cs/2+3,ox+sy*cs/2+3,cs-6,cs-6,cs*.06);x.fill();
+  }
+  for(const i of order)if(T[i].a)drawTile(i,t);
+  lk=lk.filter(l=>t-l.t0<350);
+  for(const l of lk){x.globalAlpha=1-(t-l.t0)/350;x.strokeStyle='#f5a623';x.lineWidth=3;x.lineCap='round';
+    x.beginPath();x.moveTo(l.a[0],l.a[1]);x.lineTo(l.b[0],l.b[1]);x.stroke()}
+  x.globalAlpha=1;
+  vn=vn.filter(v=>t-v.t0<320);
+  for(const v of vn){const k=(t-v.t0)/320,[p,q]=tp(v.q);tileAt(p,q,v.s,1+k*.3,1-k,k*cs*.15,false,false,t,false)}
+  for(const p of ps){p.x+=p.vx*dtg;p.y+=p.vy*dtg;p.vy+=cs*6*dtg;p.l-=dtg*1.8;
+    x.globalAlpha=Math.max(0,p.l);x.fillStyle=p.c;const z=cs*.09;x.fillRect(p.x-z/2,p.y-z/2,z,z)}
+  x.globalAlpha=1;ps=ps.filter(p=>p.l>0);
+  if(dark>0){x.fillStyle=`rgba(8,5,3,${dark})`;x.fillRect(0,0,BW,BH)}
+}
+
+/* ── факел ── */
+function drawFlame(t){
+  fl.setTransform(DPR,0,0,DPR,0,0);fl.clearRect(0,0,32,44);
+  fl.fillStyle='#6b4a2e';fl.fillRect(13,28,6,14);
+  fl.fillStyle='#2a1e14';fl.fillRect(10,26,12,4);
+  if(fuel>.01){
+    const s=5+fuel*8,f=Math.sin(t*.0015)*.6;
+    [['#b8481a',1],['#e8681c',.7],['#f5b040',.42],['#ffe8a0',.2]].forEach(([c,k])=>{
+      const z=s*k;fl.fillStyle=c;fl.beginPath();
+      fl.moveTo(16+f*.5,26-z*1.5-f);
+      fl.quadraticCurveTo(16+z*.9,26-z*.4,16,26);
+      fl.quadraticCurveTo(16-z*.9,26-z*.4,16+f*.5,26-z*1.5-f);fl.fill();
+    });
+  }
+}
+
+/* ── шапка ── */
+function hud(){
+  $('#hLv').textContent=(lv+1)+'/'+LEVELS.length;
+  $('#hTime').textContent=fmt(lim-el);
+  $('#hPairs').textContent=pairs;
+  const p=Math.round(fuel*100);
+  $('#hFuel').textContent=p+'%';
+  $('#cTime').classList.toggle('low',lim-el<=10&&state==='playing');
+  $('#torchCell').classList.toggle('low',p<=20&&state==='playing');
+}
+
+/* ── цикл ── */
+function loop(t){
+  const dt=Math.min(.1,(t-last)/1000||0);last=t;dtg=dt;
+  if(state==='playing'){
+    if(darkT<0){
+      el+=dt;fuel-=dt/burn;
+      if(fuel<=0){fuel=0;darkT=0;snd.out()}
+      if(el>=lim){el=lim;finish(false)}
+    }else{
+      darkT+=dt;
+      dark=.6*(darkT<1.2?darkT/1.2:darkT<1.8?1:Math.max(0,1-(darkT-1.8)/1.2));
+      if(darkT>1.4&&!reshuf){reshuf=true;reshuffleTiles()}
+      if(darkT>=3){darkT=-1;dark=0;fuel=1;reshuf=false;note('Факел снова горит')}
+    }
+    if(hint&&performance.now()>hintEnd)hint=null;
+    hud();
+  }
+  if(state!=='menu')draw(t);
+  if(menuEl.classList.contains('show'))drawTemple(t);
+  drawFlame(t);
+  requestAnimationFrame(loop);
+}
+
+/* ── подгонка размеров ── */
+function fit(){
+  DPR=Math.min(devicePixelRatio||1,2);
+  const st=$('#stage'),pad=16,k=.09,ex=(LZ-1)*k+.06;
+  cs=Math.max(18,Math.min(120,Math.floor(Math.min((st.clientWidth-pad)/(C+ex),(st.clientHeight-pad)/(R+ex)))));
+  ofs=cs*k;ox=(LZ-1)*ofs;
+  BW=Math.ceil(C*cs+ox+cs*.06);BH=Math.ceil(R*cs+ox+cs*.06);
+  board.width=BW*DPR;board.height=BH*DPR;
+  board.style.width=BW+'px';board.style.height=BH+'px';
+  $('#game').style.setProperty('--bw',BW+'px');
+  const f=$('#flame');f.width=32*DPR;f.height=44*DPR;
+}
+new ResizeObserver(fit).observe($('#stage'));
+
+/* ── уровни ── */
+function buildLevels(){
+  const gr=$('#levelsGrid');gr.innerHTML='';
+  LEVELS.forEach((l,i)=>{
+    const b=document.createElement('button'),open=i<S.u;
+    b.className='lv'+(open?'':' locked')+(i<S.u-1?' done':'');
+    b.innerHTML=(i+1)+(i<S.u-1?'<small>★</small>':'');
+    if(open)b.onclick=()=>startLevel(i);
+    gr.appendChild(b);
+  });
+}
+
+/* ── фон главного меню: древний храм с факелами ── */
+const menuEl=$('#menu'),tm=$('#tmpl'),tx=tm.getContext('2d'),tbase=document.createElement('canvas'),tlight=document.createElement('canvas');
+let tW=0,tH=0,emb=[];
+const tors=()=>{const pw=Math.max(34,Math.min(tW*.12,120)),ty=tH*.4;return{pw,ty,sz:Math.max(14,Math.min(tW,tH)*.04),P:[[pw/2,ty],[tW-pw/2,ty]]}};
+function bigFlame(c,px,py,s,t){
+  const f=Math.sin(t*.0012)*.03;
+  [['#a8340f',1],['#e8681c',.74],['#f5b040',.5],['#fff0b8',.26]].forEach(([col,k],i)=>{
+    const h=s*3.2*k*(1+f),w=s*1.1*k,sw=Math.sin(t*.0009+i)*s*.06*k;
+    c.fillStyle=col;c.beginPath();c.moveTo(px+sw,py-h);
+    c.quadraticCurveTo(px+w,py-h*.35,px,py);c.quadraticCurveTo(px-w,py-h*.35,px+sw,py-h);c.fill();
+  });
+}
+function buildTemple(){
+  tW=tm.clientWidth;tH=tm.clientHeight;if(!tW||!tH)return;
+  const sc=Math.min(devicePixelRatio||1,1.5);
+  [tm,tbase,tlight].forEach(c=>{c.width=Math.round(tW*sc);c.height=Math.round(tH*sc)});
+  const b=tbase.getContext('2d');b.setTransform(sc,0,0,sc,0,0);
+  let sd=11;const rnd=()=>(sd=sd*16807%2147483647)/2147483647;
+  const fy=tH*.82,bh=Math.max(26,tH/16),{pw,sz,P}=tors();
+  b.fillStyle='#2a1f14';b.fillRect(0,0,tW,tH);
+  for(let y=0,row=0;y<fy;y+=bh,row++){
+    const bw=bh*2.2;
+    for(let xx=-(row%2)*bw/2;xx<tW;xx+=bw){
+      const v=rnd()*18|0;b.fillStyle=`rgb(${66+v},${53+v},${40+v})`;b.fillRect(xx+1,y+1,bw-2,bh-2);
+      b.fillStyle='rgba(0,0,0,.2)';b.fillRect(xx+1,y+bh-5,bw-2,4);
+    }
+  }
+  /* арка-проход */
+  const aw=Math.min(tW*.24,190),ah=Math.min(fy*.62,360),ax=tW/2;
+  b.beginPath();b.moveTo(ax-aw,fy);b.lineTo(ax-aw,fy-ah+aw);b.arc(ax,fy-ah+aw,aw,Math.PI,0);b.lineTo(ax+aw,fy);b.closePath();
+  const ag=b.createLinearGradient(0,fy-ah,0,fy);ag.addColorStop(0,'#0a0503');ag.addColorStop(1,'#4a2208');
+  b.fillStyle=ag;b.fill();b.lineWidth=9;b.strokeStyle='#4f3e2a';b.stroke();
+  /* фриз с иероглифами */
+  b.fillStyle='rgba(20,12,6,.55)';b.fillRect(0,bh*.9,tW,bh*1.3);
+  b.font=`700 ${bh*.8|0}px 'Noto Serif SC',serif`;b.textAlign='center';b.textBaseline='middle';b.fillStyle='rgba(201,168,96,.4)';
+  for(let xx=bh,i=0;xx<tW;xx+=bh*1.7,i++)b.fillText('火灯光天地人王玉'[i%8],xx,bh*1.58);
+  /* колонны */
+  [0,tW-pw].forEach((px,k)=>{
+    const g=b.createLinearGradient(px,0,px+pw,0);
+    g.addColorStop(0,k?'#8d7a5a':'#2a2016');g.addColorStop(.5,'#6b5a42');g.addColorStop(1,k?'#2a2016':'#8d7a5a');
+    b.fillStyle=g;b.fillRect(px,0,pw,fy);
+    b.strokeStyle='rgba(0,0,0,.28)';b.lineWidth=1.5;
+    for(let i=1;i<6;i++){b.beginPath();b.moveTo(px+pw*i/6,bh*3);b.lineTo(px+pw*i/6,fy-bh);b.stroke()}
+    b.fillStyle='#4a3b29';b.fillRect(px-pw*.08,bh*2.3,pw*1.16,bh*.7);b.fillRect(px-pw*.08,fy-bh,pw*1.16,bh);
+  });
+  /* пол */
+  const fg=b.createLinearGradient(0,fy,0,tH);fg.addColorStop(0,'#2b2015');fg.addColorStop(1,'#100a06');
+  b.fillStyle=fg;b.fillRect(0,fy,tW,tH-fy);
+  b.strokeStyle='rgba(0,0,0,.4)';b.lineWidth=1.5;
+  for(let i=0,y=fy;y<tH;i++){b.beginPath();b.moveTo(0,y);b.lineTo(tW,y);b.stroke();y+=6*Math.pow(1.35,i)}
+  for(let i=-8;i<=8;i++){b.beginPath();b.moveTo(tW/2+i*tW*.03,fy);b.lineTo(tW/2+i*tW*.22,tH);b.stroke()}
+  /* держатели факелов */
+  P.forEach(([px,py])=>{
+    b.fillStyle='#1a120a';b.fillRect(px-3,py,6,sz*3.2);
+    b.fillStyle='#3a2a18';b.beginPath();b.moveTo(px-sz*.7,py-sz*.1);b.lineTo(px+sz*.7,py-sz*.1);
+    b.lineTo(px+sz*.4,py+sz*.7);b.lineTo(px-sz*.4,py+sz*.7);b.fill();
+  });
+  const vg=b.createRadialGradient(tW/2,tH/2,Math.min(tW,tH)*.3,tW/2,tH/2,Math.max(tW,tH)*.75);
+  vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,.65)');b.fillStyle=vg;b.fillRect(0,0,tW,tH);
+}
+function drawTemple(t){
+  if(tm.clientWidth!==tW||tm.clientHeight!==tH)buildTemple();
+  if(!tW)return;
+  const sc=tm.width/tW,{sz,P}=tors(),fy=tH*.82,ah=Math.min(fy*.62,360);
+  tx.setTransform(1,0,0,1,0,0);tx.globalCompositeOperation='source-over';tx.drawImage(tbase,0,0);
+  /* карта света: тьма с «дырами» вокруг факелов */
+  const l=tlight.getContext('2d');l.setTransform(sc,0,0,sc,0,0);
+  l.globalCompositeOperation='source-over';l.fillStyle='rgba(4,2,1,.9)';l.fillRect(0,0,tW,tH);
+  l.globalCompositeOperation='destination-out';
+  const fk=P.map((_,k)=>.9+.04*Math.sin(t*.0008+k*2)),R0=Math.min(Math.max(tW,tH)*.6,560);
+  P.forEach(([px,py],k)=>{
+    const g=l.createRadialGradient(px,py,0,px,py,R0*fk[k]);
+    g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(.35,'rgba(0,0,0,.7)');g.addColorStop(1,'rgba(0,0,0,0)');
+    l.fillStyle=g;l.fillRect(0,0,tW,tH);
+  });
+  const ay=fy-ah*.4,ag=l.createRadialGradient(tW/2,ay,0,tW/2,ay,Math.min(tW,tH)*.34);
+  ag.addColorStop(0,'rgba(0,0,0,.55)');ag.addColorStop(1,'rgba(0,0,0,0)');l.fillStyle=ag;l.fillRect(0,0,tW,tH);
+  tx.drawImage(tlight,0,0);
+  /* тёплое свечение + пламя + искры */
+  tx.setTransform(sc,0,0,sc,0,0);tx.globalCompositeOperation='lighter';
+  P.forEach(([px,py],k)=>{
+    const g=tx.createRadialGradient(px,py,0,px,py,R0*.7*fk[k]);
+    g.addColorStop(0,`rgba(255,150,50,${.3*fk[k]})`);g.addColorStop(1,'rgba(255,100,20,0)');
+    tx.fillStyle=g;tx.fillRect(0,0,tW,tH);
+  });
+  tx.globalCompositeOperation='source-over';
+  P.forEach(([px,py],k)=>bigFlame(tx,px,py-sz*.1,sz,t+k*500));
+  if(Math.random()<.05)P.forEach(([px,py])=>emb.push({x:px+(Math.random()-.5)*sz*.4,y:py-sz*2,vx:(Math.random()-.5)*sz*.3,vy:-sz*(.4+Math.random()*.6),l:1}));
+  tx.fillStyle='#ffb347';
+  for(const e of emb){e.x+=e.vx*dtg;e.y+=e.vy*dtg;e.l-=dtg*.25;tx.globalAlpha=Math.max(0,e.l);tx.fillRect(e.x,e.y,2,2)}
+  tx.globalAlpha=1;emb=emb.filter(e=>e.l>0);
+}
+
+/* ── кнопки ── */
+$('#bPlay').onclick=()=>startLevel(S.u-1);
+$('#bLevels').onclick=()=>{buildLevels();show('levels')};
+$('#bHow').onclick=()=>show('how');
+$('#bSnd1').onclick=toggleSnd;$('#bSnd2').onclick=toggleSnd;
+$('#bHint').onclick=doHint;$('#bPause').onclick=doPause;
+$('#bResume').onclick=doResume;
+$('#bRestart').onclick=()=>startLevel(lv);
+$('#bRetry').onclick=()=>startLevel(lv);
+$('#bNext').onclick=()=>startLevel(lv+1);
+document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(b.dataset.go==='menu')state='menu';show(b.dataset.go)});
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(state==='playing'){
+    if(k==='h'||k==='р')doHint();
+    
+    else if(k==='p'||k==='з'||k==='escape')doPause();
+  }else if(state==='paused'&&(k==='p'||k==='з'||k==='escape'))doResume();
+});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)doPause()});
+
+$('#bCred').onclick=()=>show('credits');
+$('#boot').onclick=endBoot;
+sndUI();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
